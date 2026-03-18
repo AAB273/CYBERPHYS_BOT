@@ -42,14 +42,12 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include <stdint.h>
 #include <stdbool.h>
 #include "msp.h"
-#include "../inc/clock.h"
-#include "../inc/LaunchPad.h"
-#include "../inc/Texas.h"
-#include "../inc/SysTickInts.h"
-#include "../inc/Reflectance.h"
-#include "../inc/Bump.h"
-#include "../inc/CortexM.h"
-#include "../inc/Motor.h"
+#include "..\inc\CortexM.h"
+#include "..\inc\SysTickInts.h"
+#include "..\inc\LaunchPad.h"
+#include "..\inc\Clock.h"
+#include "..\inc\Reflectance.h"
+#include "..\inc\Bump.h"
 
 /*(Left,Right) Motors, call LaunchPad_Output (positive logic)
 3   1,1     both motors, yellow means go straight
@@ -67,12 +65,11 @@ policies, either expressed or implied, of the FreeBSD Project.
 struct State {
   uint16_t left_duty;                // left duty cycle
   uint16_t right_duty;               //right duty cycle
-  uint32_t delay;                    // time to delay in 1ms
-  const struct State *next[10];      // Next if 2-bit input is 0-3
+  const struct State *next[11];      // Next if 2-bit input is 0-3
 };
 typedef const struct State State_t;
 
-#define Center              &fsm[0]
+#define center              &fsm[0]
 #define slight_left         &fsm[1]
 #define mid_left            &fsm[2]
 #define mid_hard_left       &fsm[3]
@@ -84,7 +81,7 @@ typedef const struct State State_t;
 // student starter code
 
 State_t fsm[9]={
-  {5000, 5000, 500, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
+  {5000, 5000, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
   {4500, 5500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
   {4000, 6000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
   {3500, 6500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
@@ -150,14 +147,22 @@ int main(void){
     Bump_Init();
     SysTick_Init(48000,5);
     EnableInterrupts();
-    Spt = Center;
-  while(1){
-      uint16_t leftD = spt->left_duty, rightD = spt->right_duty;
-      switch (Spt){
-      case (slight_left || mid_left || mid_hard_left || hard_left): Motor_Right(leftD, rightD);break;
-      case (center): Motor_Forward(leftD, rightD);break;
-      case (slight_right || mid_right || mid_hard_right || hard_right): Motor_Left(leftD, rightD);break;
-      }
-    Spt = Spt->next[LineData];       // next depends on input and state
-  }
+    Spt = center;
+    while(1){
+        uint16_t leftD = Spt->left_duty;
+        uint16_t rightD = Spt->right_duty;
+        if (Spt == center) {
+            Motor_Forward(leftD, rightD);
+        }
+        else if (Spt == slight_left || Spt == mid_left ||
+                 Spt == mid_hard_left || Spt == hard_left) {
+            Motor_Right(leftD, rightD);
+        }
+        else if (Spt == slight_right || Spt == mid_right ||
+                 Spt == mid_hard_right || Spt == hard_right) {
+            Motor_Left(leftD, rightD);
+        }
+        uint8_t input = encode(LineData);
+        Spt = Spt->next[input];
+    }
 }
