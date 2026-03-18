@@ -59,6 +59,16 @@ policies, either expressed or implied, of the FreeBSD Project.
 // reflectance sensor 7 connected to P7.6
 // reflectance sensor 8 connected to P7.7 (robot's left, robot off road to right)
 
+
+// red R-- 0x01
+// blue --B 0x04
+// green -G- 0x02
+// yellow RG- 0x03
+// sky blue -GB 0x06
+// white RGB 0x07
+// pink R-B 0x05
+
+
 #include "msp.h"
 #include "..\inc\bump.h"
 #include "..\inc\Reflectance.h"
@@ -68,107 +78,84 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\LaunchPad.h"
 #include "..\inc\FlashProgram.h"
 
+volatile int semaphore = 0, systick_count = 0;
+volatile uint8_t bump_values, sensors;
 
 void Debug_Init(void){
-  // write this as part of Lab 10
+    Clock_Init48MHz();      // running on crystal
+    SysTick_Init(48000,2);  // set up SysTick for 1000 Hz interrupts
+    LaunchPad_Init();       // P1.0 is red LED on LaunchPad
+    Reflectance_Init();
+    Bump_Init();
 }
-void Debug_Dump(uint8_t x, uint8_t y){
-  // write this as part of Lab 10
-}
-void Debug_FlashInit(void){ 
-  // write this as part of Lab 10
-}
-void Debug_FlashRecord(uint16_t *pt){
-  // write this as part of Lab 10
-}
+
 void SysTick_Handler(void){ // every 1ms
-  // write this as part of Lab 10
+//    if (systick_count == 10){
+//        Reflectance_Start();
+//        systick_count++;
+//    }
+//    else if (systick_count == 11){
+//        uint8_t i;
+//        sensors = Reflectance_End();
+          bump_values = Bump_Read();
+          semaphore = 1;
+//        for (i = 0; i <= 7; i++){
+//            if(sensors == (1 << i)) {
+//                P2->OUT = (P2->OUT & 0xF8) | i;  // Keeps bits 8-3 then it only alters the LED's output bits 0-3.
+//            } //This allows for the sensors to be tied to each consecutive LED state, with RED being 0x01 to White being 0x07
+//            if(sensors == 0x01){
+//                P1->OUT |= 0x01;
+//            }
+//            else{
+//                P1->OUT &= ~0x01;
+//            }
+//        }
+            if(bump_values == 1) {P2->OUT = 0x01;}
+            else if(bump_values == 2) {P2->OUT = 0x02;}
+            else if(bump_values == 4) {P2->OUT = 0x03;}
+            else if(bump_values == 8) {P2->OUT = 0x04;}
+            else if(bump_values == 16) {P2->OUT = 0x05;}
+            else if(bump_values == 32) {P2->OUT = 0x06;}
+            else {P2->OUT = 0x00;
+//     systick_count = 0;
+//    }
+//    else{
+          semaphore = 0;
+//        systick_count++;
+//    }
+    // The commented out code is the RGB LED mapping for the sensor.
+    }
 }
 
 int main(void){
-  // write this as part of Lab 10
-
+    Debug_Init();
+    EnableInterrupts();
+    WaitForInterrupt();
   while(1){
-  // write this as part of Lab 10
+      uint32_t i, j, temp, length;
+              uint32_t a[100]={5000,5308,5614,5918,6219,6514,
+              6804,7086,7361,7626,7880,8123,8354,8572,8776,8964,9137,
+              9294,9434,9556,9660,9746,9813,9861,9890,9900,9890,9861,
+              9813,9746,9660,9556,9434,9294,9137,8964,8776,8572,8354,
+              8123,7880,7626, 7361,7086,6804,6514,6219,5918,5614,
+              5308,5000,4692,4386,4082,3781,3486,3196,2914,2639,2374,
+              2120,1877,1646,1428,1224,1036,863,706,566,444,340,254,
+              187,139,110,100,110,139,187,254,340,444,566,706,863,
+              1036, 1224, 1428, 1646,1877,2120,2374,2639,2914,
+              3196,3486,3781,4082,4386,4692};
 
-  }
+              length = 100;
+
+              for (i = 0; i < length; i++){
+                  for (j = 0; j < length - i - 1; j++){
+
+                     if (a[j + 1] < a[j]){
+                          temp = a[j];
+                          a[j] = a[j + 1];
+                          a[j + 1] = temp;
+                     }
+                  }
+              }
+
+          }
 }
-
-int Program10_1(void){ uint8_t data=0;
-  Clock_Init48MHz();
-  Debug_Init();
-  LaunchPad_Init();
-  while(1){
-    P1->OUT |= 0x01;
-    Debug_Dump(data,data+1);// linear sequence
-    P1->OUT &= ~0x01;
-    data=data+2;
-  }
-}
-
-
-// Driver test
-#define SIZE 256  // feel free to adjust the size
-uint16_t Buffer[SIZE];
-int Program10_2(void){ uint16_t i;
-  Clock_Init48MHz();
-  LaunchPad_Init(); // built-in switches and LEDs
-  for(i=0;i<SIZE;i++){
-    Buffer[i] = (i<<8)+(255-i); // test data
-  }
-  i = 0;
-  while(1){
-    P1->OUT |= 0x01;
-    Debug_FlashInit();
-    P1->OUT &= ~0x01;
-    P2->OUT |= 0x01;
-    Debug_FlashRecord(Buffer); // 114us
-    P2->OUT &= ~0x01;
-    i++;
-  }
-}
-
-
-int Program10_3(void){ uint16_t i;
-  Clock_Init48MHz();
-  LaunchPad_Init(); // built-in switches and LEDs
-  for(i=0;i<SIZE;i++){
-    Buffer[i] = (i<<8)+(255-i); // test data
-  }
-  P1->OUT |= 0x01;
-  Debug_FlashInit();
-  P1->OUT &= ~0x01;
-  i = 0;
-  while(1){
-    P2->OUT |= 0x01;
-    Debug_FlashRecord(Buffer);
-    P2->OUT &= ~0x01;
-    i++;
-  }
-}
-
-/*
-uint8_t Buffer[1000];
-uint32_t I=0;
-uint8_t *pt;
-void DumpI(uint8_t x){
-  if(I<1000){
-    Buffer[I]=x;
-    I++;
-  }
-}
-void DumpPt(uint8_t x){
-  if(pt<&Buffer[1000]){
-    *pt=x;
-    pt++;
-  }
-}
-void Activity(void){
-  DumpI(5);
-  DumpI(6);
-  pt = Buffer;
-  DumpPt(7);
-  DumpPt(8);
-
-}
-*/
