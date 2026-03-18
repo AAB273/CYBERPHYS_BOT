@@ -40,10 +40,16 @@ policies, either expressed or implied, of the FreeBSD Project.
 */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "msp.h"
 #include "../inc/clock.h"
 #include "../inc/LaunchPad.h"
 #include "../inc/Texas.h"
+#include "../inc/SysTickInts.h"
+#include "../inc/Reflectance.h"
+#include "../inc/Bump.h"
+#include "../inc/CortexM.h"
+#include "../inc/Motor.h"
 
 /*(Left,Right) Motors, call LaunchPad_Output (positive logic)
 3   1,1     both motors, yellow means go straight
@@ -59,9 +65,10 @@ policies, either expressed or implied, of the FreeBSD Project.
 
 // Linked data structure
 struct State {
-  uint32_t out;                // 2-bit output
-  uint32_t delay;              // time to delay in 1ms
-  const struct State *next[10]; // Next if 2-bit input is 0-3
+  uint16_t left_duty;                // left duty cycle
+  uint16_t right_duty;               //right duty cycle
+  uint32_t delay;                    // time to delay in 1ms
+  const struct State *next[10];      // Next if 2-bit input is 0-3
 };
 typedef const struct State State_t;
 
@@ -74,20 +81,18 @@ typedef const struct State State_t;
 #define mid_right           &fsm[6]
 #define mid_hard_right      &fsm[7]
 #define hard_right          &fsm[8] //9 total states for each pairing or edge case of light sensors
-#define stop                &fsm[9] //in fsm example, we could change this to be continuing current state until path is found
 // student starter code
 
 State_t fsm[9]={
-  {0x03, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
-  {0x02, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
-  {0x01, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
-  {0x00, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
-  {0x00, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
-  {0x00, 500, { stop, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}}, //slight_right
-  {0x00, 500, { stop, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
-  {0x00, 500, { stop, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
-  {0x00, 500, { stop, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}, //hard_right
-  {0x00, 500, { stop, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, stop}} //stop
+  {5000, 5000, 500, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
+  {4500, 5500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
+  {4000, 6000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
+  {3500, 6500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
+  {3000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
+  {5500, 4500, { hard_right, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}}, //slight_right
+  {6000, 4000, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
+  {6500, 3500, { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
+  {7000, 3000, { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}  //hard_right
 };
 
 uint8_t encode(uint8_t sensors) {
@@ -107,37 +112,52 @@ uint8_t encode(uint8_t sensors) {
 }
 
 State_t *Spt;  // pointer to the current state
+uint32_t reflectance_result = 0;
 uint32_t Input;
 uint32_t Output;
+
+volatile uint8_t LineData  = 0;
+volatile uint8_t BumpData  = 0;
+volatile uint8_t DataReady = 0;
+
 /*Run FSM continuously
 1) Output depends on State (LaunchPad LED)
 2) Wait depends on State
 3) Input (LaunchPad buttons)
 4) Next depends on (Input,State)
  */
-int main(void){ uint32_t heart=0;
-  Clock_Init48MHz();
-  LaunchPad_Init();
-  TExaS_Init(LOGICANALYZER);  // optional
-  Spt = Center;
-  while(1){
-    Output = Spt->out;            // set output from FSM
-    LaunchPad_Output(Output);     // do output to two motors
-    TExaS_Set(Input<<2|Output);   // optional, send data to logic analyzer
-    Clock_Delay1ms(Spt->delay);   // wait
-    Input = LaunchPad_Input();    // read sensors
-    Spt = Spt->next[Input];       // next depends on input and state
-    heart = heart^1;
-    LaunchPad_LED(heart);         // optional, debugging heartbeat
-  }
+
+//insert handler here
+void SysTick_Handler(void){ // every 1ms
+    static uint8_t tickCount = 0;  // counts 0..9 then wraps
+    if(tickCount == 0){
+        Reflectance_Start();            // turn on LEDs, pulse high, switch to input
+    }
+    else if(tickCount == 1){
+        // get sensor data
+        LineData  = Reflectance_End();  // read sensors
+        BumpData  = Bump_Read();        // read bump switches (positive logic)
+        DataReady = 1;
+    }
+    tickCount = (tickCount + 1) % 10;
 }
 
-// Color    LED(s) Port2
-// dark     ---    0
-// red      R--    0x01
-// blue     --B    0x04
-// green    -G-    0x02
-// yellow   RG-    0x03
-// sky blue -GB    0x06
-// white    RGB    0x07
-// pink     R-B    0x05
+
+int main(void){
+    Clock_Init48MHz();
+    LaunchPad_Init();       // P1, P2 LEDs and switches
+    Reflectance_Init();
+    Bump_Init();
+    SysTick_Init(48000,5);
+    EnableInterrupts();
+    Spt = Center;
+  while(1){
+      uint16_t leftD = spt->left_duty, rightD = spt->right_duty;
+      switch (Spt){
+      case (slight_left || mid_left || mid_hard_left || hard_left): Motor_Right(leftD, rightD);break;
+      case (center): Motor_Forward(leftD, rightD);break;
+      case (slight_right || mid_right || mid_hard_right || hard_right): Motor_Left(leftD, rightD);break;
+      }
+    Spt = Spt->next[LineData];       // next depends on input and state
+  }
+}
