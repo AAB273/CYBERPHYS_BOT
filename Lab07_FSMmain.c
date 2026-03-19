@@ -83,13 +83,13 @@ typedef const struct State State_t;
 State_t fsm[9]={
   {5000, 5000, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
   {4500, 5500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
-  {4000, 6000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
-  {3500, 6500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
-  {3000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
+  {3500, 6500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
+  {2000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
+  {1000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
   {5500, 4500, { hard_right, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}}, //slight_right
-  {6000, 4000, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
-  {6500, 3500, { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
-  {7000, 3000, { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}  //hard_right
+  {6500, 3500, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
+  {7000, 2000, { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
+  {8000, 1000, { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}  //hard_right
 };
 
 uint8_t encode(uint8_t sensors) {
@@ -156,13 +156,14 @@ int main(void){
         }
         else if (Spt == slight_left || Spt == mid_left ||
                  Spt == mid_hard_left || Spt == hard_left) {
-            Motor_Right(leftD, rightD);
+            Motor_Forward(leftD, rightD);
         }
         else if (Spt == slight_right || Spt == mid_right ||
                  Spt == mid_hard_right || Spt == hard_right) {
-            Motor_Left(leftD, rightD);
+            Motor_Forward(leftD, rightD);
         }
         uint8_t input = encode(LineData);
-        Spt = Spt->next[input];
+        if(input != 10){
+        Spt = Spt->next[input];} //ignore noisey/invalid input
     }
 }
