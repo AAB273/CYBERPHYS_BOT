@@ -114,17 +114,17 @@ uint8_t encode(uint8_t sensors) {
         case 0x07: return 2;  // 0000 0111 -> mid_hard left  (between hard and mid left)
         case 0x0E: return 3;  // 0000 1110 -> mid left       (between mid_hard and slight left)
         case 0x1C: return 4;  // 0001 1100 -> slight left    (between mid left and center)
-        case 0x38: return 5;  // 0011 1000 -> centered       (wide center read)
-        case 0x70: return 6;  // 0111 0000 -> slight right   (between center and mid right)
-        case 0xE0: return 7;  // 1110 0000 -> mid right      (between slight and mid_hard right)
+        case 0x38: return 6;  // 0011 1000 -> centered       (wide center read)
+        case 0x70: return 7;  // 0111 0000 -> slight right   (between center and mid right)
+        case 0xE0: return 8;  // 1110 0000 -> mid right      (between slight and mid_hard right)
 
         // --- Single sensor isolated reads (noise or sharp edge) ---
         case 0x02: return 2;  // single bit near left  -> mid_hard left
         case 0x04: return 3;  // single bit mid-left   -> mid left
         case 0x08: return 4;  // single bit center-left -> slight left
-        case 0x10: return 5;  // single bit center     -> centered
-        case 0x20: return 6;  // single bit center-right -> slight right
-        case 0x40: return 7;  // single bit mid-right  -> mid right
+        case 0x10: return 6;  // single bit center     -> centered
+        case 0x20: return 7;  // single bit center-right -> slight right
+        case 0x40: return 8;  // single bit mid-right  -> mid right
 
         // --- Wide/saturated reads (robot very straight, wide line or glare) ---
         case 0x3C: return 5;  // 0011 1100 -> centered (4 sensors, well centered)
