@@ -48,6 +48,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\Clock.h"
 #include "..\inc\Reflectance.h"
 #include "..\inc\Bump.h"
+#include "..\inc\Motor.h"
 
 /*(Left,Right) Motors, call LaunchPad_Output (positive logic)
 3   1,1     both motors, yellow means go straight
@@ -81,30 +82,66 @@ typedef const struct State State_t;
 // student starter code
 
 State_t fsm[9]={
-  {5000, 5000, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
-  {4500, 5500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
-  {3500, 6500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
-  {2000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
-  {1000, 7000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
-  {5500, 4500, { hard_right, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}}, //slight_right
-  {6500, 3500, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
-  {7000, 2000, { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
-  {8000, 1000, { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}  //hard_right
+//left right
+  {2500, 2500, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // Center
+//left turns
+  {2750, 2250, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},  // slight left
+  {3250, 1750, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid left
+  {3500, 1000, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}}, //mid_hard left
+  {4000, 500, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}}, //hard_left
+//right turns
+  {2250, 2750, { hard_right, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}}, //slight_right
+  {1750, 3250, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}}, //mid_right
+  {1000, 3500, { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}}, //mid_hard_right
+  {500, 4000, { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}  //hard_right
 };
 
 uint8_t encode(uint8_t sensors) {
     switch(sensors) {
-        case 0x00: return 0; // lost // could use this to stay in same state.
-        case 0x01: return 1; //edge, off far left
-        case 0x03: return 2; //mid_hard left
-        case 0x06: return 3; //mid off left
-        case 0x0C: return 4; //slight off left
-        case 0x18: return 5; //centered
-        case 0x30: return 6; //slight off right
-        case 0x60: return 7; //mid off right
-        case 0xC0: return 8; //mid hard off right
-        case 0x80: return 9; //hard off right
-        default:   return 10; // edge/error //continue with current state
+        // --- Core clean readings ---
+        case 0x00: return 0;  // lost
+        case 0x01: return 1;  // hard left edge
+        case 0x03: return 2;  // mid_hard left
+        case 0x06: return 3;  // mid left
+        case 0x0C: return 4;  // slight left
+        case 0x18: return 5;  // centered
+        case 0x30: return 6;  // slight right
+        case 0x60: return 7;  // mid right
+        case 0xC0: return 8;  // mid_hard right
+        case 0x80: return 9;  // hard right edge
+
+        // --- 3-sensor transitions (line crossing between two clean positions) ---
+        case 0x07: return 2;  // 0000 0111 -> mid_hard left  (between hard and mid left)
+        case 0x0E: return 3;  // 0000 1110 -> mid left       (between mid_hard and slight left)
+        case 0x1C: return 4;  // 0001 1100 -> slight left    (between mid left and center)
+        case 0x38: return 5;  // 0011 1000 -> centered       (wide center read)
+        case 0x70: return 6;  // 0111 0000 -> slight right   (between center and mid right)
+        case 0xE0: return 7;  // 1110 0000 -> mid right      (between slight and mid_hard right)
+
+        // --- Single sensor isolated reads (noise or sharp edge) ---
+        case 0x02: return 2;  // single bit near left  -> mid_hard left
+        case 0x04: return 3;  // single bit mid-left   -> mid left
+        case 0x08: return 4;  // single bit center-left -> slight left
+        case 0x10: return 5;  // single bit center     -> centered
+        case 0x20: return 6;  // single bit center-right -> slight right
+        case 0x40: return 7;  // single bit mid-right  -> mid right
+
+        // --- Wide/saturated reads (robot very straight, wide line or glare) ---
+        case 0x3C: return 5;  // 0011 1100 -> centered (4 sensors, well centered)
+        case 0x7E: return 5;  // 0111 1110 -> centered (6 sensors, fully on line)
+        case 0xFF: return 5;  // all sensors -> centered (intersection or very wide line)
+
+        // --- Partial wide left reads ---
+        case 0x0F: return 3;  // 0000 1111 -> mid left
+        case 0x1F: return 4;  // 0001 1111 -> slight left
+        case 0x3F: return 5;  // 0011 1111 -> slight left bias, treat as center
+
+        // --- Partial wide right reads ---
+        case 0xF0: return 7;  // 1111 0000 -> mid right
+        case 0xF8: return 8;  // 1111 1000 -> mid_hard right
+        case 0xFC: return 5;  // 1111 1100 -> slight right bias, treat as center
+
+        default:   return 10; // truly unrecognized, hold current state
     }
 }
 
@@ -142,6 +179,7 @@ void SysTick_Handler(void){ // every 1ms
 
 int main(void){
     Clock_Init48MHz();
+    Motor_Init();
     LaunchPad_Init();       // P1, P2 LEDs and switches
     Reflectance_Init();
     Bump_Init();
@@ -149,21 +187,14 @@ int main(void){
     EnableInterrupts();
     Spt = center;
     while(1){
-        uint16_t leftD = Spt->left_duty;
-        uint16_t rightD = Spt->right_duty;
-        if (Spt == center) {
-            Motor_Forward(leftD, rightD);
+        if(DataReady == 1){
+            DataReady = 0;
+            uint16_t leftD = Spt->left_duty;
+            uint16_t rightD = Spt->right_duty;
+            Motor_Forward(leftD, rightD); //output to motors
+            uint8_t input = encode(LineData);
+            if(input != 10){
+                Spt = Spt->next[input];} //ignore noisey/invalid input
         }
-        else if (Spt == slight_left || Spt == mid_left ||
-                 Spt == mid_hard_left || Spt == hard_left) {
-            Motor_Forward(leftD, rightD);
-        }
-        else if (Spt == slight_right || Spt == mid_right ||
-                 Spt == mid_hard_right || Spt == hard_right) {
-            Motor_Forward(leftD, rightD);
-        }
-        uint8_t input = encode(LineData);
-        if(input != 10){
-        Spt = Spt->next[input];} //ignore noisey/invalid input
     }
 }
