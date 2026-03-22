@@ -45,34 +45,10 @@ void BumpInt_Init(void(*task)(uint8_t)){
 // bit 1 Bump1
 // bit 0 Bump0
 uint8_t Bump_Read(void){
-    uint8_t portValue = P4->IN;
-    uint8_t result = 0;
-
-    if ((~portValue & 0x01) != 0) {
-        result |= 0x01;  // set bit 0
-    }
-
-    if ((~portValue & 0x04) != 0) {  //bit 2
-        result |= 0x02;  // set bit 1
-    }
-
-    if ((~portValue & 0x08) != 0) {  //bit 3
-        result |= 0x04;  // set bit 2
-    }
-
-    if ((~portValue & 0x20) != 0) {  // bit 5
-        result |= 0x08;  // set bit 3
-    }
-
-    if ((~portValue & 0x40) != 0) {  // bit 6
-        result |= 0x10;  // set bit 4
-    }
-
-    if ((~portValue & 0x80) != 0) {  // bit 7
-        result |= 0x20;  // set bit 5
-    }
-
-    return result;
+    uint8_t Result;
+    Result = ~(P4->IN);
+    Result = ((Result >> 2) & 0x38) | ((Result >> 1) & 0x06) | ((Result) & 0x01); //Shifts all the bits to 5,4,3,2,1,0 position (6 LSB)
+    return Result;
 }
 // we do not care about critical section/race conditions
 // triggered on touch, falling edge
