@@ -10,32 +10,11 @@
 #include "../inc/BumpInt.h"
 #include "..\inc\Motor.h"
 
-uint8_t CollisionData, CollisionFlag;  // mailbox
+volatile uint8_t CollisionData, CollisionFlag;  // mailbox
 void HandleCollision(uint8_t bumpSensor){
    Motor_Stop();
    CollisionData = bumpSensor;
    CollisionFlag = 1;
-   switch(CollisionData) {
-        // Single bump presses
-        case 0x01: // Bump0
-            P2->OUT |= 0x01; // Blue
-            break;
-        case 0x02: // Bump1
-            P2->OUT |= 0x02; // Green
-            break;
-        case 0x04: // Bump2
-            P2->OUT |= 0x04; // Red
-            break;
-        case 0x08: // Bump3
-            P2->OUT |= 0x05; // purple
-            break;
-        case 0x10: // Bump4
-            P2->OUT |= 0x06; // Green Blue
-            break;
-        case 0x20: // Bump5
-            P2->OUT |= 0x03; // yellow
-            break;
-    }
 }
 
 
@@ -71,17 +50,19 @@ typedef const struct State State_t;
 // student starter code
 
 State_t fsm[9]={
-// left   right   [ 0=lost       1=h_l       2=mh_l        3=m_l       4=sl_l      5=ctr       6=sl_r        7=m_r       8=mh_r        9=h_r       10=err  ]
-  {2000,  2000,   { center,      hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, center      }}, // center
-  {1800,  2200,   { slight_left, hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, slight_left }}, // slight_left
-  {1400,  2600,   { mid_left,    hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_left    }}, // mid_left
-  {800,   2800,   { mid_hard_left,hard_left, mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_hard_left}},// mid_hard_left
-  {400,   2800,   { hard_left,   hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, hard_left   }}, // hard_left
-  {2200,  1800,   { slight_right,hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, slight_right}}, // slight_right
-  {2600,  1400,   { mid_right,   hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_right   }}, // mid_right
-  {2800,  800,    { mid_hard_right,hard_left,mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_hard_right}},//mid_hard_right
-  {2800,  400,    { hard_right,  hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, hard_right  }}  // hard_right
+// left   right   [ 0=lost          1=h_l          2=mh_l          3=m_l        4=sl_l        5=ctr    6=sl_r         7=m_r        8=mh_r           9=h_r        10=err        ]
+  {3000,  3000,   { center,         hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  center        }}, // center
+  {2700,  3300,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
+  {2100,  3900,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
+  {1200,  4200,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
+  {600,   4200,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
+  {3300,  2700,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
+  {3900,  2100,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
+  {4200,  1200,   { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
+  {4200,  600,    { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
 };
+
+// PWM 3000,3000 90 Degree turn!
 
 uint8_t encode(uint8_t sensors) {
     switch(sensors) {
@@ -119,20 +100,23 @@ uint8_t encode(uint8_t sensors) {
         case 0xFF: return 5;  // all sensors -> centered (intersection or very wide line)
 
         // --- Partial wide left reads ---
-        case 0x0F: return 3;  // 0000 1111 -> mid left
-        case 0x1F: return 4;  // 0001 1111 -> slight left
-        case 0x3F: return 5;  // 0011 1111 -> slight left bias, treat as center
+        case 0x0F: return 1;  // 0000 1111 -> mid left
+        case 0x1F: return 1;  // 0001 1111 -> slight left
+        case 0x3F: return 1;  // 0011 1111 -> slight left bias, treat as center
 
         // --- Partial wide right reads ---
-        case 0xF0: return 7;  // 1111 0000 -> mid right
-        case 0xF8: return 8;  // 1111 1000 -> mid_hard right
-        case 0xFC: return 5;  // 1111 1100 -> slight right bias, treat as center
+        case 0xF0: return 9;  // 1111 0000 -> hard right
+        case 0xF8: return 9;  // 1111 1000 -> mid_hard right
+        case 0xFC: return 9;  // 1111 1100 -> slight right bias, treat as center
 
         default:   return 10; // truly unrecognized, hold current state
     }
 }
 
 State_t *Spt;  // pointer to the current state
+uint32_t reflectance_result = 0;
+uint32_t Input;
+uint32_t Output;
 
 volatile uint8_t LineData  = 0;
 volatile uint8_t BumpData  = 0;
@@ -149,7 +133,7 @@ void SysTick_Handler(void){ // every 1ms
         BumpData  = Bump_Read();        // read bump switches (positive logic)
         DataReady = 1;
     }
-    tickCount = (tickCount + 1) % 10;
+    tickCount = (tickCount + 1) % 7;
 }
 
 void Pause(void){
@@ -163,21 +147,41 @@ int main(void){
     Motor_Init();
     LaunchPad_Init();       // P1, P2 LEDs and switches
     Reflectance_Init();
-    Bump_Init();
+    BumpInt_Init(&HandleCollision);
     SysTick_Init(48000,5);
     EnableInterrupts();
     Spt = center;
+    Motor_Stop();
     Pause();
     while(1){
         WaitForInterrupt();
-        if(DataReady == 1){
+//        if(CollisionFlag){
+//            Motor_Stop();
+//            SysTick_Wait10ms(50);
+//            Motor_Backward(2000, 2000);
+//            SysTick_Wait10ms(50);       // 500ms backup
+//            Motor_Stop();
+//
+//            switch(CollisionData) {
+//                    // Single bump presses
+//                    case 0x08: // Bump2 and Bump3
+//                        SysTick_Wait10ms(50);
+//                        Motor_Right(4750,4750);
+//                        SysTick_Wait10ms(50);
+//                        Motor_Stop();
+//                        break;
+//                }
+//
+//            CollisionFlag = 0;
+//        }
+        if(DataReady){
             DataReady = 0;
             uint16_t leftD = Spt->left_duty;
             uint16_t rightD = Spt->right_duty;
             Motor_Forward(leftD, rightD); //output to motors
             uint8_t input = encode(LineData);
             if(input != 10){
-                Spt = Spt->next[input];} //ignore noisey/invalid input
+                Spt = Spt->next[input];} //ignore noisy/invalid input
         }
     }
 }
