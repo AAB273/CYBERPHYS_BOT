@@ -48,7 +48,16 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "..\inc\Clock.h"
 #include "..\inc\Reflectance.h"
 #include "..\inc\Bump.h"
+#include "../inc/BumpInt.h"
 #include "..\inc\Motor.h"
+
+uint8_t CollisionData, CollisionFlag;  // mailbox
+void HandleCollision(uint8_t bumpSensor){
+   Motor_Stop();
+   CollisionData = bumpSensor;
+   CollisionFlag = 1;
+}
+
 
 /*(Left,Right) Motors, call LaunchPad_Output (positive logic)
 3   1,1     both motors, yellow means go straight
@@ -179,6 +188,7 @@ void SysTick_Handler(void){ // every 1ms
 
 int main(void){
     Clock_Init48MHz();
+    CollisionFlag = 0;
     Motor_Init();
     LaunchPad_Init();       // P1, P2 LEDs and switches
     Reflectance_Init();
@@ -187,6 +197,7 @@ int main(void){
     EnableInterrupts();
     Spt = center;
     while(1){
+        WaitForInterrupt();
         if(DataReady == 1){
             DataReady = 0;
             uint16_t leftD = Spt->left_duty;
