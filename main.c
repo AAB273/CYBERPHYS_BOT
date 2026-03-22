@@ -50,18 +50,16 @@ typedef const struct State State_t;
 // student starter code
 
 State_t fsm[9]={
-//left  right
-  {2000, 2000, { hard_right, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, center}},  // center
-//left turns (left slower, right faster)
-  {1800, 2200, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, center, mid_left, mid_hard_left, hard_left, slight_left}},   // slight_left
-  {1400, 2600, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, center, mid_hard_left, hard_left, mid_left}},   // mid_left
-  {800,  2800, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, center, hard_left, mid_hard_left}},   // mid_hard_left
-  {400,  2800, { hard_left, hard_right, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, center, hard_left}},   // hard_left
-//right turns (right slower, left faster)
-  {2200, 1800, { hard_right, hard_right, mid_hard_right, mid_right, center, center, slight_left, mid_left, mid_hard_left, hard_left, slight_right}},  // slight_right
-  {2600, 1400, { hard_right, hard_right, mid_hard_right, center, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_right}},  // mid_right
-  {2800, 800,  { hard_right, hard_right, center, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, mid_hard_right}},  // mid_hard_right
-  {2800, 400,  { hard_right, center, mid_hard_right, mid_right, slight_right, center, slight_left, mid_left, mid_hard_left, hard_left, hard_right}}   // hard_right
+// left   right   [ 0=lost       1=h_l       2=mh_l        3=m_l       4=sl_l      5=ctr       6=sl_r        7=m_r       8=mh_r        9=h_r       10=err  ]
+  {2000,  2000,   { center,      hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, center      }}, // center
+  {1800,  2200,   { slight_left, hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, slight_left }}, // slight_left
+  {1400,  2600,   { mid_left,    hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_left    }}, // mid_left
+  {800,   2800,   { mid_hard_left,hard_left, mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_hard_left}},// mid_hard_left
+  {400,   2800,   { hard_left,   hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, hard_left   }}, // hard_left
+  {2200,  1800,   { slight_right,hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, slight_right}}, // slight_right
+  {2600,  1400,   { mid_right,   hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_right   }}, // mid_right
+  {2800,  800,    { mid_hard_right,hard_left,mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, mid_hard_right}},//mid_hard_right
+  {2800,  400,    { hard_right,  hard_left,  mid_hard_left, mid_left,  slight_left, center,    slight_right, mid_right,  mid_hard_right,hard_right, hard_right  }}  // hard_right
 };
 
 uint8_t encode(uint8_t sensors) {
@@ -114,9 +112,6 @@ uint8_t encode(uint8_t sensors) {
 }
 
 State_t *Spt;  // pointer to the current state
-uint32_t reflectance_result = 0;
-uint32_t Input;
-uint32_t Output;
 
 volatile uint8_t LineData  = 0;
 volatile uint8_t BumpData  = 0;
