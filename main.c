@@ -133,7 +133,7 @@ void SysTick_Handler(void){ // every 1ms
         BumpData  = Bump_Read();        // read bump switches (positive logic)
         DataReady = 1;
     }
-    tickCount = (tickCount + 1) % 7;
+    tickCount = (tickCount + 1) % 10;
 }
 
 void Pause(void){
