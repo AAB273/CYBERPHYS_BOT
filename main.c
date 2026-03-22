@@ -15,6 +15,27 @@ void HandleCollision(uint8_t bumpSensor){
    Motor_Stop();
    CollisionData = bumpSensor;
    CollisionFlag = 1;
+   switch(CollisionData) {
+        // Single bump presses
+        case 0x01: // Bump0
+            P2->OUT |= 0x01; // Blue
+            break;
+        case 0x02: // Bump1
+            P2->OUT |= 0x02; // Green
+            break;
+        case 0x04: // Bump2
+            P2->OUT |= 0x04; // Red
+            break;
+        case 0x08: // Bump3
+            P2->OUT |= 0x05; // purple
+            break;
+        case 0x10: // Bump4
+            P2->OUT |= 0x06; // Green Blue
+            break;
+        case 0x20: // Bump5
+            P2->OUT |= 0x03; // yellow
+            break;
+    }
 }
 
 
