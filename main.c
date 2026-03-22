@@ -185,6 +185,10 @@ void SysTick_Handler(void){ // every 1ms
     tickCount = (tickCount + 1) % 10;
 }
 
+void Pause(void){
+  while(LaunchPad_Input()==0);  // wait for touch
+  while(LaunchPad_Input());     // wait for release
+}
 
 int main(void){
     Clock_Init48MHz();
@@ -196,6 +200,7 @@ int main(void){
     SysTick_Init(48000,5);
     EnableInterrupts();
     Spt = center;
+    Pause();
     while(1){
         WaitForInterrupt();
         if(DataReady == 1){
