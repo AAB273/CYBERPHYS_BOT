@@ -49,18 +49,19 @@ typedef const struct State State_t;
 #define hard_right          &fsm[8] //9 total states for each pairing or edge case of light sensors
 // student starter code
 
+
 State_t fsm[9]={
 // left   right   [ 0=lost          1=h_l          2=mh_l          3=m_l        4=sl_l        5=ctr    6=sl_r         7=m_r        8=mh_r           9=h_r        10=err        ]
-  {3000,  3000,   { center,         hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  center        }}, // center
-  {2700,  3300,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
-  {2100,  3900,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
-  {1200,  4200,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
-  {600,   4200,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
-  {3300,  2700,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
-  {3900,  2100,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
-  {4200,  1200,   { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
-  {4200,  600,    { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
-};
+  {2250,  2250,   { center,         hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  center        }}, // center
+  {2175,  2475,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
+  {1575,  2925,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
+  {900,   3150,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
+  {1575,  3150,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
+  {2475,  2175,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
+  {2925,  1575,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
+  {3150,  900,    { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
+  {3150,  1575,   { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
+}; //1.5x speed
 
 // PWM 3000,3000 90 Degree turn!
 
@@ -133,7 +134,7 @@ void SysTick_Handler(void){ // every 1ms
         BumpData  = Bump_Read();        // read bump switches (positive logic)
         DataReady = 1;
     }
-    tickCount = (tickCount + 1) % 10;
+    tickCount = (tickCount + 1) % 7;
 }
 
 void Pause(void){
@@ -154,84 +155,75 @@ int main(void){
     Motor_Stop();
     Pause();
     while(1){
-       // Wait for a collision
-      while(CollisionFlag == 0){
-          WaitForInterrupt();  // Sleep until something happens
-       }
-
-       // Handle the collision
-      while(CollisionFlag){
-         Motor_Stop();
-         SysTick_Wait10ms(500);          // Pause
-         Motor_Backward(7000, 7000);     // Back up
-         SysTick_Wait10ms(1000);          // Backup duration
-         Motor_Stop();
-
-         switch(CollisionData) {
-            // Single bump presses based on pin mapping
-            case 0x01:  // Bump0 (P4.0 - right side)
-               SysTick_Wait10ms(50);
-               Motor_Right(0, 7000);    // Right motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-
-            case 0x02:  // Bump1 (P4.2)
-               SysTick_Wait10ms(50);
-               Motor_Forward(5000, 0);    // Left motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-
-            case 0x04:  // Bump2 (P4.3)
-               SysTick_Wait10ms(50);
-               Motor_Right(0, 7000);    // Right motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Right(0, 7000);    // Right motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-            
-            case 0x08:  // Bump3 (P4.5)
-               SysTick_Wait10ms(50);
-               Motor_Left(7000, 0);    // Left motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Left(7000, 0);    // Left motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-            
-            case 0x10:  // Bump4 (P4.6)
-               SysTick_Wait10ms(50);
-               Motor_Forward(0, 5000);    // Right motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-            
-            case 0x20:  // Bump5 (P4.7 - left side)
-               SysTick_Wait10ms(50);
-               Motor_Right(0, 7000);    // Right motor forward only
-               SysTick_Wait10ms(100);
-               Motor_Stop();
-               break;
-
-            default:    // Multiple bumps or unknown
-               SysTick_Wait10ms(50);
-               Motor_Backward(2000, 2000);
-               SysTick_Wait10ms(50);
-               Motor_Stop();
-               break;
-         }
-
-         CollisionFlag = 0;  // Clear flag after handling
-      }
-
-       
+        //WaitForInterrupt();
+//        if(CollisionFlag){
+//            Motor_Stop();
+//            Clock_Delay1ms(10);          // 10ms pause
+//            Motor_Backward(2000, 2000);
+//            Clock_Delay1ms(10);          // 10ms backup
+//            Motor_Stop();
+//
+//            switch(CollisionData){
+//                case 0x01:  // Bump0 (P4.0 - right side)
+//                    Clock_Delay1ms(10);
+//                    Motor_Forward(2250, 0);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                case 0x02:  // Bump1 (P4.2)
+//                    Clock_Delay1ms(10);
+//                    Motor_Forward(5000, 0);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                case 0x04:  // Bump2 (P4.3)
+//                    Clock_Delay1ms(10);
+//                    Motor_Right(4000, 4000);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                case 0x08:  // Bump3 (P4.5)
+//                    Clock_Delay1ms(10);
+//                    Motor_Left(6000, 6000);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                case 0x10:  // Bump4 (P4.6)
+//                    Clock_Delay1ms(10);
+//                    Motor_Forward(0, 5000);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                case 0x20:  // Bump5 (P4.7 - left side)
+//                    Clock_Delay1ms(10);
+//                    Motor_Forward(0, 2250);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//
+//                default:
+//                    Clock_Delay1ms(10);
+//                    Motor_Backward(2000, 2000);
+//                    Clock_Delay1ms(10);
+//                    Motor_Stop();
+//                    break;
+//            }
+//
+//            CollisionFlag = 0;
+//            Spt = center;
+//        }
         if(DataReady){
             DataReady = 0;
             uint16_t leftD = Spt->left_duty;
             uint16_t rightD = Spt->right_duty;
-            Motor_Forward(leftD, rightD); //output to motors
+            if (Spt == hard_left || Spt == mid_hard_left) {Motor_Left(leftD,rightD);}
+            else if (Spt == hard_right || Spt == mid_hard_right) {Motor_Right(leftD,rightD);}
+            else{Motor_Forward(leftD, rightD);} //output to motors
             uint8_t input = encode(LineData);
             if(input != 10){
                 Spt = Spt->next[input];} //ignore noisy/invalid input
