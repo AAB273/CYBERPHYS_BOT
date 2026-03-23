@@ -50,17 +50,18 @@ typedef const struct State State_t;
 // student starter code
 
 
+
 State_t fsm[9]={
 // left   right   [ 0=lost          1=h_l          2=mh_l          3=m_l        4=sl_l        5=ctr    6=sl_r         7=m_r        8=mh_r           9=h_r        10=err        ]
   {2250,  2250,   { center,         hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  center        }}, // center
-  {2175,  2475,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
-  {1575,  2925,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
-  {900,   3150,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
-  {1575,  3150,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
-  {2475,  2175,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
-  {2925,  1575,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
-  {3150,  900,    { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
-  {3150,  1575,   { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
+  {2175,  2350,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
+  {1675,  2725,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
+  {1000,  3150,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
+  {1775,  3150,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
+  {2350,  2175,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
+  {2725,  1675,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
+  {3150,  1000,    { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
+  {3150,  1775,   { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
 }; //1.5x speed
 
 // PWM 3000,3000 90 Degree turn!
@@ -155,69 +156,68 @@ int main(void){
     Motor_Stop();
     Pause();
     while(1){
-        //WaitForInterrupt();
-//        if(CollisionFlag){
-//            Motor_Stop();
-//            Clock_Delay1ms(10);          // 10ms pause
-//            Motor_Backward(2000, 2000);
-//            Clock_Delay1ms(10);          // 10ms backup
-//            Motor_Stop();
-//
-//            switch(CollisionData){
-//                case 0x01:  // Bump0 (P4.0 - right side)
-//                    Clock_Delay1ms(10);
-//                    Motor_Forward(2250, 0);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                case 0x02:  // Bump1 (P4.2)
-//                    Clock_Delay1ms(10);
-//                    Motor_Forward(5000, 0);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                case 0x04:  // Bump2 (P4.3)
-//                    Clock_Delay1ms(10);
-//                    Motor_Right(4000, 4000);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                case 0x08:  // Bump3 (P4.5)
-//                    Clock_Delay1ms(10);
-//                    Motor_Left(6000, 6000);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                case 0x10:  // Bump4 (P4.6)
-//                    Clock_Delay1ms(10);
-//                    Motor_Forward(0, 5000);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                case 0x20:  // Bump5 (P4.7 - left side)
-//                    Clock_Delay1ms(10);
-//                    Motor_Forward(0, 2250);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//
-//                default:
-//                    Clock_Delay1ms(10);
-//                    Motor_Backward(2000, 2000);
-//                    Clock_Delay1ms(10);
-//                    Motor_Stop();
-//                    break;
-//            }
-//
-//            CollisionFlag = 0;
-//            Spt = center;
-//        }
-        if(DataReady){
+        WaitForInterrupt();
+        if(CollisionFlag){
+            Motor_Stop();
+            Clock_Delay1ms(1000);          // 10ms pause
+            Motor_Backward(2000, 2000);
+            Clock_Delay1ms(1000);          // 10ms backup
+            Motor_Stop();
+
+            switch(CollisionData){
+                case 0x03:
+                case 0x01:  // Bump0 (P4.0 - right side)
+                    Clock_Delay1ms(1000);
+                    Motor_Forward(1500, 0);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+
+                case 0x06:
+                case 0x02:  // Bump1 (P4.2)
+                    Clock_Delay1ms(1000);
+                    Motor_Forward(2500, 0);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+
+                case 0x0C:
+                case 0x08:
+                case 0x04:  // Bump2 (P4.3)
+                    Clock_Delay1ms(1000);
+                    Motor_Right(3000, 3000);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+
+                case 0x18:
+                case 0x10:  // Bump4 (P4.6)
+                    Clock_Delay1ms(1000);
+                    Motor_Forward(0, 2500);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+
+                case 0x30:
+                case 0x20:  // Bump5 (P4.7 - left side)
+                    Clock_Delay1ms(1000);
+                    Motor_Forward(0, 1500);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+
+                default:
+                    Clock_Delay1ms(1000);
+                    Motor_Backward(2000, 2000);
+                    Clock_Delay1ms(1000);
+                    Motor_Stop();
+                    break;
+            }
+
+            CollisionFlag = 0;
+            Spt = center;
+        }
+        else if(DataReady){
             DataReady = 0;
             uint16_t leftD = Spt->left_duty;
             uint16_t rightD = Spt->right_duty;
