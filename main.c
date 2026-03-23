@@ -154,26 +154,79 @@ int main(void){
     Motor_Stop();
     Pause();
     while(1){
-        WaitForInterrupt();
-//        if(CollisionFlag){
-//            Motor_Stop();
-//            SysTick_Wait10ms(50);
-//            Motor_Backward(2000, 2000);
-//            SysTick_Wait10ms(50);       // 500ms backup
-//            Motor_Stop();
-//
-//            switch(CollisionData) {
-//                    // Single bump presses
-//                    case 0x08: // Bump2 and Bump3
-//                        SysTick_Wait10ms(50);
-//                        Motor_Right(4750,4750);
-//                        SysTick_Wait10ms(50);
-//                        Motor_Stop();
-//                        break;
-//                }
-//
-//            CollisionFlag = 0;
-//        }
+       // Wait for a collision
+      while(CollisionFlag == 0){
+          WaitForInterrupt();  // Sleep until something happens
+       }
+
+       // Handle the collision
+      while(CollisionFlag){
+         Motor_Stop();
+         SysTick_Wait10ms(500);          // Pause
+         Motor_Backward(7000, 7000);     // Back up
+         SysTick_Wait10ms(1000);          // Backup duration
+         Motor_Stop();
+
+         switch(CollisionData) {
+            // Single bump presses based on pin mapping
+            case 0x01:  // Bump0 (P4.0 - right side)
+               SysTick_Wait10ms(50);
+               Motor_Right(0, 7000);    // Right motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+
+            case 0x02:  // Bump1 (P4.2)
+               SysTick_Wait10ms(50);
+               Motor_Forward(5000, 0);    // Left motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+
+            case 0x04:  // Bump2 (P4.3)
+               SysTick_Wait10ms(50);
+               Motor_Right(0, 7000);    // Right motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Right(0, 7000);    // Right motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+            
+            case 0x08:  // Bump3 (P4.5)
+               SysTick_Wait10ms(50);
+               Motor_Left(7000, 0);    // Left motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Left(7000, 0);    // Left motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+            
+            case 0x10:  // Bump4 (P4.6)
+               SysTick_Wait10ms(50);
+               Motor_Forward(0, 5000);    // Right motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+            
+            case 0x20:  // Bump5 (P4.7 - left side)
+               SysTick_Wait10ms(50);
+               Motor_Right(0, 7000);    // Right motor forward only
+               SysTick_Wait10ms(100);
+               Motor_Stop();
+               break;
+
+            default:    // Multiple bumps or unknown
+               SysTick_Wait10ms(50);
+               Motor_Backward(2000, 2000);
+               SysTick_Wait10ms(50);
+               Motor_Stop();
+               break;
+         }
+
+         CollisionFlag = 0;  // Clear flag after handling
+      }
+
+       
         if(DataReady){
             DataReady = 0;
             uint16_t leftD = Spt->left_duty;
