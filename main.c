@@ -54,14 +54,14 @@ typedef const struct State State_t;
 State_t fsm[9]={
 // left   right   [ 0=lost          1=h_l          2=mh_l          3=m_l        4=sl_l        5=ctr    6=sl_r         7=m_r        8=mh_r           9=h_r        10=err        ]
   {2250,  2250,   { center,         hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  center        }}, // center
-  {2175,  2350,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
-  {1675,  2725,   { mid_left,       hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
-  {1000,  3150,   { mid_hard_left,  hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
-  {1775,  3150,   { hard_left,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
-  {2350,  2175,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
-  {2725,  1675,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
-  {3150,  1000,    { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_right}}, // mid_hard_right
-  {3150,  1775,   { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_right    }}  // hard_right
+  {2175,  2350,   { slight_left,    hard_left,      mid_hard_left,  mid_left,    center,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  slight_left   }}, // slight_left
+  {1675,  2725,   { mid_left,       hard_left,      mid_hard_left,  slight_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_left      }}, // mid_left
+  {1000,  3150,   { mid_hard_left,  hard_left,      mid_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  mid_hard_left }}, // mid_hard_left
+  {1775,  3150,   { hard_left,      mid_hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  hard_right,  hard_left     }}, // hard_left
+  {2350,  2175,   { slight_right,   hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  center,  mid_right,   mid_hard_right,  hard_right,  slight_right  }}, // slight_right
+  {2725,  1675,   { mid_right,      hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  slight_right,   mid_hard_right,  hard_right,  mid_right     }}, // mid_right
+  {3150,  1000,   { mid_hard_right, hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_right,  hard_right,  mid_hard_right}}, // mid_hard_right
+  {3150,  1775,   { hard_right,     hard_left,      mid_hard_left,  mid_left,    slight_left,  center,  slight_right,  mid_right,   mid_hard_right,  mid_hard_right,  hard_right    }}  // hard_right
 }; //1.5x speed
 
 // PWM 3000,3000 90 Degree turn!
