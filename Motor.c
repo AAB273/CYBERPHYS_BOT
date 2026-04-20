@@ -85,7 +85,7 @@ void Motor_Init(void){
     P5->OUT &= ~0x30;
 
     //P2
-    PWM_Init34(10000,5000,5000);
+    PWM_Init34(15000,5000,5000);
 
 
 }
@@ -115,10 +115,11 @@ void Motor_Stop(void){
 // Assumes: Motor_Init() has been called
 void Motor_Forward(uint16_t leftDuty, uint16_t rightDuty){ 
 
+    P3->OUT |= 0xC0;   // Left and Right Motors awoken
     P5->OUT &= ~0x30; //Both Motors Forward
 
-    PWM_Duty3(leftDuty);
-    PWM_Duty4(rightDuty);
+    PWM_Duty3(rightDuty);
+    PWM_Duty4(leftDuty);
     return;
 
 }
@@ -136,8 +137,8 @@ void Motor_Right(uint16_t leftDuty, uint16_t rightDuty){
     P5->OUT |= 0x10;
     P5->OUT &= ~0x20;
 
-    PWM_Duty3(leftDuty);
-    PWM_Duty4(rightDuty);
+    PWM_Duty3(rightDuty);
+    PWM_Duty4(leftDuty);
 
 }
 
@@ -153,8 +154,8 @@ void Motor_Left(uint16_t leftDuty, uint16_t rightDuty){
 
     P5->OUT |= 0x20;
     P5->OUT &= ~0x10;
-    PWM_Duty3(leftDuty);
-    PWM_Duty4(rightDuty);
+    PWM_Duty3(rightDuty);
+    PWM_Duty4(leftDuty);
 
 }
 
@@ -170,7 +171,7 @@ void Motor_Backward(uint16_t leftDuty, uint16_t rightDuty){
 
     P5->OUT |= 0x30; //Both Motors Backwards
 
-    PWM_Duty3(leftDuty);
-    PWM_Duty4(rightDuty);
+    PWM_Duty3(rightDuty);
+    PWM_Duty4(leftDuty);
 
 }
