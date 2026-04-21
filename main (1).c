@@ -1,0 +1,250 @@
+// main.c
+// Race controller with PI wall-following, bump recovery, and MQTT telemetry
+// MSP432 + RSLK Max + OPT3101
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include "msp.h"
+#include "../inc/Clock.h"
+#include "../inc/CortexM.h"
+#include "../inc/Motor.h"
+#include "../inc/BumpInt.h"
+#include "../inc/opt3101.h"
+#include "../inc/I2CB1.h"
+#include "../inc/UART0.h"
+//#include "../inc/MQTT.h"
+
+// -----------------------------------------------
+// PI Gains — tuned for mm-based error signal
+// -----------------------------------------------
+#define KP           15       // raised: produces meaningful correction at small errors
+#define KI           50       // lowered: avoids windup fighting KP
+#define KI_SCALE     1024
+
+// -----------------------------------------------
+// Speed
+// -----------------------------------------------
+#define BASE_DUTY    5000
+#define PWMMIN       2
+#define PWMMAX       14998
+
+// -----------------------------------------------
+// Bump recovery settings
+// -----------------------------------------------
+#define BACKUP_DUTY      4000
+#define BACKUP_TIME_MS   600
+#define TURN_DUTY        4000
+#define TURN_TIME_MS     600
+#define SETTLE_TIME_MS   200
+
+// -----------------------------------------------
+// Front wall stop threshold (mm)
+// -----------------------------------------------
+#define FRONT_WALL_MM    300   // stop if center sensor reads closer than this
+
+// -----------------------------------------------
+// Sensor globals — updated by polling
+// -----------------------------------------------
+uint32_t Distances[3];     // [0]=Left  [1]=Center  [2]=Right
+uint32_t Amplitudes[3];
+uint32_t TxChannel;
+
+// -----------------------------------------------
+// PI state
+// -----------------------------------------------
+int32_t Integral  = 0;
+int32_t LastError = 0;
+int32_t UL, UR;
+
+#define INTEGRAL_MAX  50000
+#define INTEGRAL_MIN -50000
+
+// -----------------------------------------------
+// Race state flags — written by bump ISR
+// -----------------------------------------------
+volatile bool    RaceRunning  = false;
+volatile bool    BumpOccurred = false;
+volatile uint8_t LastBumpData = 0;
+
+// -----------------------------------------------
+void PID_Control_Init(void) {
+    Integral  = 0;
+    LastError = 0;
+    UL = BASE_DUTY;
+    UR = BASE_DUTY;
+}
+
+// -----------------------------------------------
+// Poll OPT3101 — call every main loop iteration
+// Cycles channels 0->1->2->0 automatically
+// -----------------------------------------------
+void PollDistanceSensor(void) {
+    static uint32_t currentChannel = 0;
+
+    if (OPT3101_CheckDistanceSensor()) {
+        TxChannel = OPT3101_GetMeasurement(Distances, Amplitudes);
+        currentChannel = (currentChannel + 1) % 3;
+        OPT3101_StartMeasurementChannel(currentChannel);
+    }
+}
+
+// -----------------------------------------------
+// Returns false if center sensor sees a front wall
+// -----------------------------------------------
+bool PID_Control_Update(void) {
+
+    // Front wall stop — only trigger on valid reading
+    if (Distances[1] < FRONT_WALL_MM && Distances[1] < 65530) {
+        return false;
+    }
+
+    // Hold last PWM if either side sensor is invalid
+    if (Distances[0] >= 65530 || Distances[2] >= 65530) {
+        Motor_Forward((uint16_t)UL, (uint16_t)UR);
+        return true;
+    }
+
+    // Error: positive = too far right, negative = too far left
+    int32_t error = (int32_t)Distances[0] - (int32_t)Distances[2];
+
+    // Integral with windup clamp
+    Integral += error;
+    if (Integral >  INTEGRAL_MAX) Integral =  INTEGRAL_MAX;
+    if (Integral <  INTEGRAL_MIN) Integral =  INTEGRAL_MIN;
+
+    // PI correction — KP handles instant response, KI handles steady drift
+    int32_t correction = (KP * error) + (KI * Integral / KI_SCALE);
+    //                                         ^^^^^^^
+    //                  Fixed: was (KI * error) — integral term must use
+    //                  Integral accumulator, not raw error, or it's just
+    //                  a second proportional term
+
+    UL = BASE_DUTY - correction;
+    UR = BASE_DUTY + correction;
+
+    // Clamp
+    if (UL > PWMMAX) UL = PWMMAX;
+    if (UL < PWMMIN) UL = PWMMIN;
+    if (UR > PWMMAX) UR = PWMMAX;
+    if (UR < PWMMIN) UR = PWMMIN;
+
+    Motor_Forward((uint16_t)UL, (uint16_t)UR);
+    LastError = error;
+    return true;
+}
+
+// -----------------------------------------------
+// Bump recovery — called from main loop only
+// -----------------------------------------------
+void BumpRecovery(uint8_t bumpData) {
+
+    Motor_Stop();
+    Clock_Delay1ms(500);
+
+    Motor_Backward(BACKUP_DUTY, BACKUP_DUTY);
+    Clock_Delay1ms(BACKUP_TIME_MS);
+    Motor_Stop();
+    Clock_Delay1ms(200);
+
+    uint8_t leftHit  = bumpData & 0x38;
+    uint8_t rightHit = bumpData & 0x07;
+
+    if (leftHit && !rightHit) {
+        printf("Bump: left — turning right\n\r");
+        Motor_Right(TURN_DUTY, TURN_DUTY);
+    } else if (rightHit && !leftHit) {
+        printf("Bump: right — turning left\n\r");
+        Motor_Left(TURN_DUTY, TURN_DUTY);
+    } else {
+        printf("Bump: ambiguous — turning right\n\r");
+        Motor_Right(TURN_DUTY, TURN_DUTY);
+    }
+
+    Clock_Delay1ms(TURN_TIME_MS);
+    Motor_Stop();
+    Clock_Delay1ms(SETTLE_TIME_MS);
+
+    PID_Control_Init();
+}
+
+// -----------------------------------------------
+// Bump ISR callback — flags only, no motor calls
+// -----------------------------------------------
+void BumpCallback(uint8_t bumpData) {
+    if (!RaceRunning) {
+        RaceRunning = true;
+    } else {
+        BumpOccurred = true;
+        LastBumpData = bumpData;
+    }
+}
+
+// -----------------------------------------------
+// Main
+// -----------------------------------------------
+void main(void) {
+    Clock_Init48MHz();
+    I2CB1_Init(30);
+    Motor_Init();
+    BumpInt_Init(BumpCallback);
+    UART0_Initprintf();
+
+    // Safe distance init
+    Distances[0] = Distances[1] = Distances[2] = 1000;
+    Amplitudes[0] = Amplitudes[1] = Amplitudes[2] = 0;
+
+    // OPT3101 startup — polling mode
+    OPT3101_Init();
+    OPT3101_Setup();
+    OPT3101_CalibrateInternalCrosstalk();
+    OPT3101_StartMeasurementChannel(0);
+
+    PID_Control_Init();
+
+    // Enable NVIC for Port 4 bump interrupts
+    NVIC->IP[38]  = 0x40;
+    NVIC->ISER[1] = 0x00000040;
+
+    EnableInterrupts();
+
+    printf("\n\rRace controller ready. Press any bump to start.\n\r");
+
+    // --- Wait for bump press to start ---
+    while(!RaceRunning){};
+    Clock_Delay1ms(500);          // debounce pause before launch
+    printf("Race started!\n\r");
+
+    // --- Explicitly start motors after start bump ---
+    Motor_Forward(BASE_DUTY, BASE_DUTY);
+
+    // -----------------------------------------------
+    // Main race loop
+    // -----------------------------------------------
+    while(1) {
+
+        // Poll distance sensor every iteration
+        PollDistanceSensor();
+
+        // Bump recovery — ISR set the flag, we handle it here
+        if (BumpOccurred) {
+            BumpOccurred = false;
+            BumpRecovery(LastBumpData);
+            // Resume: restart motors after recovery
+            Motor_Forward(BASE_DUTY, BASE_DUTY);
+        }
+
+        // PI wall-following — also restarts motors internally
+        if (!PID_Control_Update()) {
+            Motor_Stop();
+            printf("Front wall — stopped.\n\r");
+            while(1){};
+        }
+
+        // Debug — remove before race to reduce loop latency
+        printf("L=%lu C=%lu R=%lu UL=%ld UR=%ld\n\r",
+               Distances[0], Distances[1], Distances[2], UL, UR);
+
+        Clock_Delay1ms(20);
+    }
+}
