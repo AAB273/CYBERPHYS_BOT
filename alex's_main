@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "msp.h"
 #include "..\inc\CortexM.h"
 #include "..\inc\LaunchPad.h"
@@ -8,8 +9,88 @@
 #include "..\inc\BumpInt.h"
 #include "../inc/TimerA1.h"
 #include "..\inc\Motor.h"
-#include "../inc/UART0.h"
+#include "../inc/UART1.h"
+#include "../inc/Tachometer.h"
+#include "../inc/IRDistance.h"
+#include "../inc/I2CB1.h"
+#include "opt3101.h"
 #include "Mqtt_custom.h"
+#include <string.h>
+
+// PID VARIABLES /////////////////////////////////////////////////////////
+uint16_t DesiredL = 65;                  // desired rotations per minute
+uint16_t DesiredR = 85;                  // desired rotations per minute
+#define DESIREDMAX 120                   // maximum rotations per minute
+#define DESIREDMIN  30                   // minimum rotations per minute (works poorly at 30 RPM due to 16-bit timer overflow)
+uint16_t ActualL = 0;                        // actual rotations per minute
+uint16_t ActualR = 0;                        // actual rotations per minute
+uint16_t LeftDuty = 3750;                // duty cycle of left wheel (0 to 14,998)
+uint16_t RightDuty = 3750;               // duty cycle of right wheel (0 to 14,998)
+
+#define TACHBUFF 10                      // number of elements in tachometer array
+uint16_t LeftTach[TACHBUFF];             // tachometer period of left wheel (number of 0.0833 usec cycles to rotate 1/360 of a wheel rotation)
+uint16_t RightTach[TACHBUFF];            // tachometer period of right wheel (number of 0.0833 usec cycles to rotate 1/360 of a wheel rotation)
+int i = 0;
+
+#define PWMMIN 2
+#define PWMMAX 14998
+int32_t Error_L;
+int32_t Error_R;
+int32_t Error_L_prev;
+int32_t Error_R_prev;
+int32_t Kp = 10;  //integral gain
+int32_t UR, UL;  // PWM duty bounded between 2000 and 7000
+
+uint16_t Average_RPM_L[TACHBUFF];
+uint16_t Average_RPM_R[TACHBUFF];
+
+//////////////////////////////////////////////////////////
+
+// DISTANCE SENSOR VARIABLES /////////////////////////////
+
+uint32_t Distances[3];
+uint32_t Amplitudes[3];
+uint32_t TxChannel;
+uint32_t left;
+uint32_t center;
+uint32_t right;
+int time = 0;
+int time_counter;
+int emergency_counter = 0;
+
+/////////////////////////////////////////////////////////
+
+// RYAN's VARIABLES /////////////////////////////////////
+
+// -------------------------
+// Constants
+// -------------------------
+#define DISTANCE_THRESHOLD_MM   150
+#define DRIVE_DUTY              3750    // ~25% of 14998 max — tune as needed
+#define INVALID_DISTANCE_MIN    65530   // sentinel values from OPT3101 driver
+
+typedef enum {
+    STATE_FIND_WALL,
+    STATE_FOLLOW_WALL,
+    STATE_EMERGENCY
+} RobotState;
+
+
+
+RobotState state = STATE_FIND_WALL;
+
+// -------------------------
+// Globals
+// -------------------------
+
+#define MAXPWM 7000
+#define MINPWM 1000
+#define EMERGENCY  100                   // minimum distance from wall without emergency handling
+#define DESIREDRANGE 150                       //maximimum distance from wall without wall searching
+
+
+/////////////////////////////////////////////////////////
+volatile uint8_t BumpData  = 0;
 
 volatile uint8_t CollisionData, CollisionFlag;  // mailbox
 void HandleCollision(uint8_t bumpSensor){
@@ -18,117 +99,339 @@ void HandleCollision(uint8_t bumpSensor){
    CollisionFlag = 1;
 }
 
-
-struct State {
-  uint16_t left_duty;                // left duty cycle
-  uint16_t right_duty;               //right duty cycle
-  const struct State *next[11];      // Next if 2-bit input is 0-3
-};
-typedef const struct State State_t;
-
-#define center              &fsm[0]
-
-
-State_t fsm[9]={}; //1.5x speed
-
-
-
-
-
-State_t *Spt;  // pointer to the current state
-uint32_t reflectance_result = 0;
-uint32_t Input;
-uint32_t Output;
-
-volatile uint8_t LineData  = 0;
-volatile uint8_t BumpData  = 0;
-volatile uint8_t DataReady = 0;
-
-//void TimerA1_Task(void){
 //
-//}
+//struct State {
+//  uint16_t left_duty;                // left duty cycle
+//  uint16_t right_duty;               //right duty cycle
+//  const struct State *next[11];      // Next if 2-bit input is 0-3
+//};
+//typedef const struct State State_t;
+//
+//#define center              &fsm[0]
+//
+//
+//State_t fsm[9]={}; //1.5x speed
+//
+//State_t *Spt;  // pointer to the current state
+//uint32_t reflectance_result = 0;
+//uint32_t Input;
+//uint32_t Output;
+
+char cmdBuf[10];
+int cmdIdx = 0;
+int start = 0;
+
+bool pollDistanceSensor(uint32_t *channel)
+{
+    if (OPT3101_CheckDistanceSensor())
+    {
+        *channel = OPT3101_GetMeasurement(Distances, Amplitudes);
+        return true;
+    }
+    return false;
+}
+// Returns 0 if left wall is closer/valid, 2 if right wall is closer/valid, 1 if neither
+uint32_t getActiveWallChannel(void) {
+    uint32_t dL = Distances[0];
+    uint32_t dR = Distances[2];
+
+    bool leftValid  = (dL > 0 && dL < INVALID_DISTANCE_MIN && dL > 100 && dL <= 300);
+    bool rightValid = (dR > 0 && dR < INVALID_DISTANCE_MIN && dR > 100 && dR <= 300);
+
+    if (leftValid && rightValid)
+        return (dL <= dR) ? 0 : 2;   // follow whichever is closer
+    if (leftValid)  return 0;
+    if (rightValid) return 2;
+    return 1;   // sentinel: no valid wall
+}
+
+bool objectWithinThreshold(void)
+{
+        uint32_t d = Distances[1];
+
+        // Ignore uninitialized (0) and OPT3101 sentinel error values
+        if (d == 0 || d >= INVALID_DISTANCE_MIN)
+            return false;
+
+        if (d <= DISTANCE_THRESHOLD_MM)
+            return true;
+        else{return false;}
+}
+
+//function to notify if we are in wall following range
+bool WithinRange(void){
+    uint32_t ch;
+    uint32_t d;
+    for(ch = 0 ; ch < 3; ch++){
+        if(ch == 1)
+            continue;
+        d = Distances[ch];
+        if((d < 300) && (d > 100)){
+            return true;
+        }
+    }
+    return false;
+}
+
+//function telling us if we are too close to walls
+bool EmergencyRange(void) {
+    uint32_t ch;
+    for (ch = 0; ch < 3; ch++) {
+        uint32_t d = Distances[ch];
+        if (d > 0 && d < INVALID_DISTANCE_MIN && d < EMERGENCY)
+            return true;
+    }
+    return false;
+}
+
+
+uint16_t avg(uint16_t *array, int length)
+{
+  int i;
+  uint32_t sum = 0;
+
+  for(i=0; i<length; i=i+1)
+  {
+    sum = sum + array[i];
+  }
+  return (sum/length);
+}
+
+
+int RPM_Calculate(uint16_t *ActualR, uint16_t *ActualL){
+
+    Tachometer_Get(&LeftTach[i], 0, 0, &RightTach[i], 0, 0);
+    if(i >= TACHBUFF)
+          {
+            //This section of the code checks the wheel state every second (10*100ms)
+            i = 0;
+
+            //Sense state of wheels (in RPM) and take the average of the last n values
+            // (1/tach step/cycles) * (12,000,000 cycles/sec) * (60 sec/min) * (1/360 rotation/step)
+            *ActualL = 2000000/avg(LeftTach, TACHBUFF);
+            *ActualR = 2000000/avg(RightTach, TACHBUFF);
+            return 1;
+          }
+    *ActualL = 0;
+    *ActualR = 0;
+    return 0;
+}
+
+void TimerA1_Task(void){
+//    if(time_counter == 1000){
+//        time++;
+//        time_counter = 0;
+//        char timestring[10];
+//        sprintf(timestring, "%d", time);
+//        MQTT_Send(timestring, "Time");
+//    }
+//    else{
+//        time_counter++;
+//    }
+        if (RPM_Calculate(&ActualL, &ActualR) == 1){
+            char stringL[4];
+            char stringR[4];
+            sprintf(stringL, "%d", ActualL);
+            sprintf(stringR, "%d", ActualR);
+
+//            MQTT_Send(stringL, "MaxSpeedLBLT");
+//            MQTT_Send(stringR, "MaxSpeedRBLT");
+        }
+
+
+}
+
+
 
 void Pause(void){
   while(LaunchPad_Input()==0);  // wait for touch
   while(LaunchPad_Input());     // wait for release
 }
 
-int main(void){
+
+
+
+void ALL_INITS(){
     Clock_Init48MHz();
-    CollisionFlag = 0;
     Motor_Init();
     LaunchPad_Init();       // P1, P2 LEDs and switches
     Reflectance_Init();
     BumpInt_Init(&HandleCollision);
-    //TimerA1_Init(&TimerA1_Task, 48000);  // add this
-    MQTT_Init();
+    TimerA1_Init(&TimerA1_Task, 48000);  // add this
+    //MQTT_Init();
     EnableInterrupts();
+    I2CB1_Init(30);          // 12 MHz / 30 = 400 kHz I2C
+    UART1_Init();
+    OPT3101_Init();
+    OPT3101_Setup();
+    OPT3101_CalibrateInternalCrosstalk();
+}
+
+int main(void){
+    CollisionFlag = 0;
+    // Initialize all distance slots to a safe "no reading" value
+    Distances[0] = Distances[1] = Distances[2] = 65535;
+    Amplitudes[0] = Amplitudes[1] = Amplitudes[2] = 0;
+
+    ALL_INITS();
     Motor_Stop();
-    Pause();
-    while(1){
-        WaitForInterrupt();
-        if(CollisionFlag){
-            Motor_Stop();
-            Clock_Delay1ms(1000);          // 1s pause
-            Motor_Backward(2000, 2000);
-            Clock_Delay1ms(1000);          // 1s backup
-            Motor_Stop();
 
-            switch(CollisionData){
-                case 0x03:
-                case 0x01:  // Bump0 (P4.0 - right side)
-                    Clock_Delay1ms(1000);
-                    Motor_Forward(1500, 0);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
+    uint32_t channel = 0;   // start on channel 0
+    // Kick off first measurement
+    OPT3101_StartMeasurementChannel(channel);
+    //Start motors with nominal values
+    UR = RightDuty;
+    UL = LeftDuty;
 
-                case 0x06:
-                case 0x02:  // Bump1 (P4.2)
-                    Clock_Delay1ms(1000);
-                    Motor_Forward(2500, 0);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
-
-                case 0x0C:
-                case 0x08:
-                case 0x04:  // Bump2 (P4.3)
-                    Clock_Delay1ms(1000);
-                    Motor_Right(3000, 3000);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
-
-                case 0x18:
-                case 0x10:  // Bump4 (P4.6)
-                    Clock_Delay1ms(1000);
-                    Motor_Forward(0, 2500);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
-
-                case 0x30:
-                case 0x20:  // Bump5 (P4.7 - left side)
-                    Clock_Delay1ms(1000);
-                    Motor_Forward(0, 1500);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
-
-                default:
-                    Clock_Delay1ms(1000);
-                    Motor_Backward(2000, 2000);
-                    Clock_Delay1ms(1000);
-                    Motor_Stop();
-                    break;
+    CollisionFlag = 0;
+    while(start == 0){
+        if(UART1_InStatus()){
+            char c = UART1_InChar();
+            if(c == '\n' || c == '\r'){
+                cmdBuf[cmdIdx] = '\0';  // null terminate
+                if(strcmp(cmdBuf, "go") == 0)   start = 1;
+                cmdIdx = 0;  // reset for next command
+            } else {
+                if(cmdIdx < 9) cmdBuf[cmdIdx++] = c;
             }
+        }
+    }
+    while (start) {
+        if(UART1_InStatus()){
+                char c = UART1_InChar();
+                if(c == '\n' || c == '\r'){
+                    cmdBuf[cmdIdx] = '\0';
+                    if(strcmp(cmdBuf, "stop") == 0) start = 0;
+                    cmdIdx = 0;
+                } else {
+                    if(cmdIdx < 9) cmdBuf[cmdIdx++] = c;
+                }
+            }
+        if (CollisionFlag)
+        {
+            switch(CollisionData){
+                        case 0x03:
+                        case 0x01:  // Bump0 (P4.0 - right side)
+                            Clock_Delay1ms(1000);
+                            Motor_Forward(1500, 0);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
 
-            CollisionFlag = 0;
+                        case 0x06:
+                        case 0x02:  // Bump1 (P4.2)
+                            Clock_Delay1ms(1000);
+                            Motor_Forward(2500, 0);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
+
+                        case 0x0C:
+                        case 0x08:
+                        case 0x04:  // Bump2 (P4.3)
+                            Clock_Delay1ms(1000);
+                            Motor_Right(3000, 3000);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
+
+                        case 0x18:
+                        case 0x10:  // Bump4 (P4.6)
+                            Clock_Delay1ms(1000);
+                            Motor_Forward(0, 2500);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
+
+                        case 0x30:
+                        case 0x20:  // Bump5 (P4.7 - left side)
+                            Clock_Delay1ms(1000);
+                            Motor_Forward(0, 1500);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
+
+                        default:
+                            Clock_Delay1ms(1000);
+                            Motor_Backward(2000, 2000);
+                            Clock_Delay1ms(1000);
+                            Motor_Stop();
+                            break;
+                    }
+
+                    CollisionFlag = 0;
         }
         else{
-            MQTT_Send("HI RYAN","NewTopicNet");
-            Clock_Delay1ms(5000);
+            // ---- Poll sensor every iteration ----
+                if (pollDistanceSensor(&channel)) {
+                    uint32_t nextChannel = (channel + 1) % 3;
+                    OPT3101_StartMeasurementChannel(nextChannel);
+                }
+
+                uint32_t wallCh = getActiveWallChannel();
+
+                // ---- State transitions ----
+                    if (EmergencyRange()) {
+                        state = STATE_EMERGENCY;
+                    } else if (wallCh != 1) {
+                        state = STATE_FOLLOW_WALL;
+                    } else {
+                        state = STATE_FIND_WALL;
+                    }
+
+                // ---- State actions ----
+                switch (state) {
+
+                        case STATE_FIND_WALL:
+                            // No wall in range: drive forward at nominal duty
+                            Motor_Forward(LeftDuty, RightDuty);
+                            break;
+
+                        case STATE_FOLLOW_WALL: {
+                            int32_t measured = (int32_t)Distances[wallCh];
+                            int32_t desired  = 300;
+
+                            // Error: positive = too far, negative = too close
+                            int32_t error = measured - desired;
+
+                            if (wallCh == 0) {
+                                // Left wall: too far  turn left (slow left, fast right)
+                                //            too close  turn right
+                                UL = LeftDuty  - Kp * error;
+                                UR = RightDuty + Kp * error;
+                            } else {
+                                // Right wall: too far  turn right (fast left, slow right)
+                                //             too close  turn left
+                                UL = LeftDuty  + Kp * error;
+                                UR = RightDuty - Kp * error;
+                            }
+
+                            // Clamp
+                            if (UL > MAXPWM) UL = MAXPWM;
+                            if (UL < MINPWM) UL = MINPWM;
+                            if (UR > MAXPWM) UR = MAXPWM;
+                            if (UR < MINPWM) UR = MINPWM;
+
+                            Motor_Forward((uint16_t)UL, (uint16_t)UR);
+                            break;
+                        }
+
+                        case STATE_EMERGENCY: {
+
+                            // Back away from whichever side is closest
+                            if (Distances[0] < Distances[2]) {
+                                // Left is closer  back up curving right
+                                Motor_Backward(2000,6000);
+
+                            } else {
+                                // Right is closer  back up curving left
+                                Motor_Backward(6000, 2000);
+                            }
+                            Clock_Delay1ms(250);
+                            state = STATE_FIND_WALL;  // re-evaluate next iteration
+                            break;
+                        }
+                    }
+            }
         }
-   }
 }
