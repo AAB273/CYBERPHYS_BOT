@@ -9,7 +9,7 @@
 #include "..\inc\BumpInt.h"
 #include "../inc/TimerA1.h"
 #include "..\inc\Motor.h"
-#include "../inc/UART1.h"
+#include "../inc/UART0.h"
 #include "../inc/Tachometer.h"
 #include "../inc/IRDistance.h"
 #include "../inc/I2CB1.h"
@@ -119,7 +119,7 @@ void HandleCollision(uint8_t bumpSensor){
 
 char cmdBuf[10];
 int cmdIdx = 0;
-int start = 0;
+volatile int start = 0;
 
 bool pollDistanceSensor(uint32_t *channel)
 {
@@ -216,6 +216,21 @@ int RPM_Calculate(uint16_t *ActualR, uint16_t *ActualL){
     *ActualR = 0;
     return 0;
 }
+void checkUART(void){
+    char c = UART0_InChar();
+    if(c != 0){
+        if(c == '\n' || c == '\r'){
+            cmdBuf[cmdIdx] = '\0';
+            if(strcmp(cmdBuf, "s") == 0) start = 0;
+            if(strcmp(cmdBuf, "g") == 0) start = 1;
+            cmdIdx = 0;
+            cmdBuf[0] = '\0';
+        } else {
+            if(cmdIdx < 9) cmdBuf[cmdIdx++] = c;
+        }
+    }
+}
+
 
 void TimerA1_Task(void){
 //    if(time_counter == 1000){
@@ -237,9 +252,11 @@ void TimerA1_Task(void){
 //            MQTT_Send(stringL, "MaxSpeedLBLT");
 //            MQTT_Send(stringR, "MaxSpeedRBLT");
         }
+        checkUART();
 
 
 }
+
 
 
 
@@ -254,6 +271,7 @@ void Pause(void){
 void ALL_INITS(){
     Clock_Init48MHz();
     Motor_Init();
+    Motor_Stop();
     LaunchPad_Init();       // P1, P2 LEDs and switches
     Reflectance_Init();
     BumpInt_Init(&HandleCollision);
@@ -261,7 +279,7 @@ void ALL_INITS(){
     //MQTT_Init();
     EnableInterrupts();
     I2CB1_Init(30);          // 12 MHz / 30 = 400 kHz I2C
-    UART1_Init();
+    UART0_Init();
     OPT3101_Init();
     OPT3101_Setup();
     OPT3101_CalibrateInternalCrosstalk();
@@ -274,7 +292,7 @@ int main(void){
     Amplitudes[0] = Amplitudes[1] = Amplitudes[2] = 0;
 
     ALL_INITS();
-    Motor_Stop();
+
 
     uint32_t channel = 0;   // start on channel 0
     // Kick off first measurement
@@ -284,36 +302,19 @@ int main(void){
     UL = LeftDuty;
 
     CollisionFlag = 0;
-    while(start == 0){
-        if(UART1_InStatus()){
-            char c = UART1_InChar();
-            if(c == '\n' || c == '\r'){
-                cmdBuf[cmdIdx] = '\0';  // null terminate
-                if(strcmp(cmdBuf, "go") == 0)   start = 1;
-                cmdIdx = 0;  // reset for next command
-            } else {
-                if(cmdIdx < 9) cmdBuf[cmdIdx++] = c;
-            }
-        }
+    while(!start){
+        checkUART();
     }
     while (start) {
-        if(UART1_InStatus()){
-                char c = UART1_InChar();
-                if(c == '\n' || c == '\r'){
-                    cmdBuf[cmdIdx] = '\0';
-                    if(strcmp(cmdBuf, "stop") == 0) start = 0;
-                    cmdIdx = 0;
-                } else {
-                    if(cmdIdx < 9) cmdBuf[cmdIdx++] = c;
-                }
-            }
+        checkUART();
         if (CollisionFlag)
         {
+            Clock_Delay1ms(500);
             switch(CollisionData){
                         case 0x03:
                         case 0x01:  // Bump0 (P4.0 - right side)
                             Clock_Delay1ms(1000);
-                            Motor_Forward(1500, 0);
+                            Motor_Backward(5000, 1000);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
@@ -321,7 +322,7 @@ int main(void){
                         case 0x06:
                         case 0x02:  // Bump1 (P4.2)
                             Clock_Delay1ms(1000);
-                            Motor_Forward(2500, 0);
+                            Motor_Backward(4250, 1000);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
@@ -330,7 +331,7 @@ int main(void){
                         case 0x08:
                         case 0x04:  // Bump2 (P4.3)
                             Clock_Delay1ms(1000);
-                            Motor_Right(3000, 3000);
+                            Motor_Backward(4000, 2000);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
@@ -338,7 +339,7 @@ int main(void){
                         case 0x18:
                         case 0x10:  // Bump4 (P4.6)
                             Clock_Delay1ms(1000);
-                            Motor_Forward(0, 2500);
+                            Motor_Backward(2000, 4000);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
@@ -346,14 +347,14 @@ int main(void){
                         case 0x30:
                         case 0x20:  // Bump5 (P4.7 - left side)
                             Clock_Delay1ms(1000);
-                            Motor_Forward(0, 1500);
+                            Motor_Backward(2000, 4250);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
 
                         default:
                             Clock_Delay1ms(1000);
-                            Motor_Backward(2000, 2000);
+                            Motor_Backward(1000, 5000);
                             Clock_Delay1ms(1000);
                             Motor_Stop();
                             break;
