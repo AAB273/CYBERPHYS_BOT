@@ -20,14 +20,20 @@
 // Constants
 // -------------------------
 #define DISTANCE_THRESHOLD_MM   150
-#define DRIVE_DUTY              3750    // ~25% of 14998 max â€” tune as needed
+#define DRIVE_DUTY              3750    // ~25% of 14998 max — tune as needed
 #define INVALID_DISTANCE_MIN    65530   // sentinel values from OPT3101 driver
 
 typedef enum {
     STATE_FIND_WALL,
     STATE_FOLLOW_WALL,
+    STATE_WALL_LOST,    // was following, now lost — turn to re-acquire
     STATE_EMERGENCY
 } RobotState;
+
+// Track which wall we were last following and when we lost it
+uint32_t lastWallCh = 1;        // 1 = none yet
+uint32_t wallLostTimer = 0;     // counts loop iterations since wall lost
+#define WALL_LOST_TIMEOUT 300   // iterations before giving up and going to FIND
 
 
 // -------------------------
@@ -39,10 +45,10 @@ uint32_t TxChannel;          // most recently updated channel (0, 1, or 2)
 
 
 
-#define MAXPWM 7000
+#define MAXPWM 10000
 #define MINPWM 1000
-#define EMERGENCY  100                   // minimum distance from wall without emergency handling
-#define DESIREDRANGE 150                       //maximimum distance from wall without wall searching
+#define EMERGENCY  75                   // minimum distance from wall without emergency handling
+#define DESIREDRANGE 200                       //maximimum distance from wall without wall searching
 uint16_t ActualL;                        // actual rotations per minute
 uint16_t ActualR;                        // actual rotations per minute
 uint16_t LeftDuty = 3000;                // duty cycle of left wheel (0 to 14,998)
@@ -50,7 +56,7 @@ uint16_t RightDuty = 3000;               // duty cycle of right wheel (0 to 14,9
 
 int32_t Error_L;    //proportional error based on distance and desired
 int32_t Error_R;
-int32_t Kp=10;  //proportional gain
+int32_t Kp=15;  //proportional gain
 int32_t t;
 int32_t UR, UL;  // PWM duty bounded between 2000 and 7000
 
@@ -202,14 +208,16 @@ void main(void)
                 UART0_OutString("mm\n\r");
             }
 
+            uint32_t wallCh = getActiveWallChannel();
+
             // ---- State transitions ----
-            if (EmergencyRange()) {
-                state = STATE_EMERGENCY;
-            } else if (getActiveWallChannel() != 1) {
-                state = STATE_FOLLOW_WALL;
-            } else {
-                state = STATE_FIND_WALL;
-            }
+                if (EmergencyRange()) {
+                    state = STATE_EMERGENCY;
+                } else if (wallCh != 1) {
+                    state = STATE_FOLLOW_WALL;
+                } else {
+                    state = STATE_FIND_WALL;
+                }
 
             // ---- State actions ----
             switch (state) {
@@ -220,7 +228,6 @@ void main(void)
                     break;
 
                 case STATE_FOLLOW_WALL: {
-                    uint32_t wallCh  = getActiveWallChannel();
                     int32_t measured = (int32_t)Distances[wallCh];
                     int32_t desired  = 300;
 
@@ -254,16 +261,32 @@ void main(void)
                     // Back away from whichever side is closest
                     if (Distances[0] < Distances[2]) {
                         // Left is closer  back up curving right
-                        Motor_Backward(MINPWM, MAXPWM);
+                        Motor_Backward(2000,6000);
 
                     } else {
                         // Right is closer  back up curving left
-                        Motor_Backward(MAXPWM, MINPWM);
+                        Motor_Backward(6000, 2000);
                     }
-                    Clock_Delay1ms(175);
+                    Clock_Delay1ms(250);
                     state = STATE_FIND_WALL;  // re-evaluate next iteration
                     break;
                 }
+//                case STATE_WALL_LOST: {
+//                    // Turn toward where the wall was to try to re-acquire it
+//                    // If last wall was on the left (ch0), turn left to sweep back toward it
+//                    // If last wall was on the right (ch2), turn right
+//                    if (lastWallCh == 0) {
+//                        // Last wall was left: slow right motor to arc left
+//                        Motor_Forward(LeftDuty - 2000, RightDuty + 2000);
+//                    } else if (lastWallCh == 2) {
+//                        // Last wall was right: slow left motor to arc right
+//                        Motor_Forward(LeftDuty + 2000, RightDuty - 2000);
+//                    } else {
+//                        // No history — just go straight
+//                        Motor_Forward(LeftDuty, RightDuty);
+//                    }
+//                    break;
+//                }
             }
         }
 
